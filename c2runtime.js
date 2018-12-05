@@ -27483,6 +27483,7 @@ cr.getObjectRefTable = function () {
 		cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
 		cr.system_object.prototype.exps["int"],
 		cr.plugins_.LocalStorage.prototype.exps.ItemValue,
+		cr.system_object.prototype.cnds.Every,
 		cr.plugins_.Button.prototype.cnds.OnClicked,
 		cr.system_object.prototype.acts.ResetGlobals,
 		cr.plugins_.LocalStorage.prototype.acts.SetItem
