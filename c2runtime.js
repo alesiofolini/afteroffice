@@ -27467,10 +27467,9 @@ cr.getObjectRefTable = function () {
 		cr.system_object.prototype.cnds.OnLayoutStart,
 		cr.plugins_.Text.prototype.acts.SetText,
 		cr.plugins_.LocalStorage.prototype.acts.GetItem,
-		cr.system_object.prototype.cnds.EveryTick,
-		cr.system_object.prototype.cnds.Compare,
-		cr.system_object.prototype.exps.random,
+		cr.system_object.prototype.cnds.Every,
 		cr.system_object.prototype.acts.CreateObject,
+		cr.system_object.prototype.exps.random,
 		cr.system_object.prototype.exps.originalviewportwidth,
 		cr.plugins_.Sprite.prototype.exps.Width,
 		cr.plugins_.Sprite.prototype.exps.Height,
@@ -27483,9 +27482,9 @@ cr.getObjectRefTable = function () {
 		cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
 		cr.system_object.prototype.exps["int"],
 		cr.plugins_.LocalStorage.prototype.exps.ItemValue,
-		cr.system_object.prototype.cnds.Every,
 		cr.plugins_.Button.prototype.cnds.OnClicked,
 		cr.system_object.prototype.acts.ResetGlobals,
+		cr.system_object.prototype.cnds.Compare,
 		cr.plugins_.LocalStorage.prototype.acts.SetItem
 	];
 };
