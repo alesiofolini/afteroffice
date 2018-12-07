@@ -28467,14 +28467,12 @@ cr.getObjectRefTable = function () {
 		cr.system_object.prototype.exps["int"],
 		cr.plugins_.LocalStorage.prototype.exps.ItemValue,
 		cr.plugins_.Browser.prototype.acts.ExecJs,
+		cr.plugins_.Browser.prototype.cnds.OnUpdateReady,
+		cr.plugins_.Browser.prototype.acts.Reload,
 		cr.plugins_.Button.prototype.cnds.OnClicked,
 		cr.system_object.prototype.acts.ResetGlobals,
 		cr.system_object.prototype.cnds.Compare,
 		cr.plugins_.LocalStorage.prototype.acts.SetItem,
-		cr.plugins_.Browser.prototype.cnds.OnUpdateFound,
-		cr.plugins_.Browser.prototype.acts.Reload,
-		cr.plugins_.Browser.prototype.cnds.OnOfflineReady,
-		cr.plugins_.Browser.prototype.acts.Alert,
 		cr.plugins_.Browser.prototype.acts.RequestFullScreen
 	];
 };
