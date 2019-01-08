@@ -612,33 +612,47 @@ if (typeof Object.getPrototypeOf !== "function")
 			 | (Math.max(Math.min(blue, 255), 0) << 16);
 	};
 
-	// Extended range RGB value
-	var RGBEX_SHIFT = 131072;	// 2^17
-	var RGBEX_MAX = 65535;		// 2^16 - 1
-	var RGBEX_MIN = -65536;		// -(2^16)
-	cr.RGBEx = function RGBEx(red, green, blue)
+	// Extended range RGBA value, backported from C3 runtime
+	var ALPHAEX_SHIFT = 1024;		// 2^10
+	var RGBEX_SHIFT = 16384;		// 2^14
+	var RGBEX_MAX = 8191;			// 2^13 - 1
+	var RGBEX_MIN = -8192;			// -(2^13)
+	cr.RGBAEx = function RGBAEx(red, green, blue, alpha)
 	{
 		red = cr.clamp(Math.floor(red * 1024), RGBEX_MIN, RGBEX_MAX);
 		green = cr.clamp(Math.floor(green * 1024), RGBEX_MIN, RGBEX_MAX);
 		blue = cr.clamp(Math.floor(blue * 1024), RGBEX_MIN, RGBEX_MAX);
+		alpha = cr.clamp(Math.floor(alpha * 1024), 0, 1024);		// no overdrive for alpha
 
-		// Shift negative numbers in to upper positive range
+		// Shift negative color components in to upper positive range
 		if (red < 0)
 			red += RGBEX_SHIFT;
 		if (green < 0)
 			green += RGBEX_SHIFT;
 		if (blue < 0)
 			blue += RGBEX_SHIFT;
-
+		
 		// Combine arithmetically since bitwise operators will truncate to 32-bit
 		return -(
-			red * RGBEX_SHIFT * RGBEX_SHIFT +
-			green * RGBEX_SHIFT +
-			blue
+			red * RGBEX_SHIFT * RGBEX_SHIFT * ALPHAEX_SHIFT +
+			green * RGBEX_SHIFT * ALPHAEX_SHIFT +
+			blue * ALPHAEX_SHIFT +
+			alpha
 		);
 	};
 	
-	cr.GetRValue = function (rgb)
+	cr.RGBEx = function RGBEx(red, green, blue)
+	{
+		return cr.RGBAEx(red, green, blue, 1);
+	};
+	
+	function isNegativeZero(x)
+	{
+		return x === 0 && (1 / x < 0);		// dividing by -0 gives -Infinity
+	}
+	
+	// Extract color components as a float [0, 1]
+	cr.GetRValue = function GetRValue(rgb)
 	{
 		if (rgb >= 0)
 		{
@@ -646,14 +660,14 @@ if (typeof Object.getPrototypeOf !== "function")
 		}
 		else
 		{
-			var v = Math.floor(-rgb / (RGBEX_SHIFT * RGBEX_SHIFT));
+			var v = Math.floor(-rgb / (RGBEX_SHIFT * RGBEX_SHIFT * ALPHAEX_SHIFT));
 			if (v > RGBEX_MAX)
 				v -= RGBEX_SHIFT;
 			return v / 1024;
 		}
 	};
 	
-	cr.GetGValue = function (rgb)
+	cr.GetGValue = function GetGValue(rgb)
 	{
 		if (rgb >= 0)
 		{
@@ -661,14 +675,14 @@ if (typeof Object.getPrototypeOf !== "function")
 		}
 		else
 		{
-			var v = Math.floor((-rgb % (RGBEX_SHIFT * RGBEX_SHIFT)) / RGBEX_SHIFT);
+			var v = Math.floor((-rgb % (RGBEX_SHIFT * RGBEX_SHIFT * ALPHAEX_SHIFT)) / (RGBEX_SHIFT * ALPHAEX_SHIFT));
 			if (v > RGBEX_MAX)
 				v -= RGBEX_SHIFT;
 			return v / 1024;
 		}
 	};
 	
-	cr.GetBValue = function (rgb)
+	cr.GetBValue = function GetBValue(rgb)
 	{
 		if (rgb >= 0)
 		{
@@ -676,12 +690,30 @@ if (typeof Object.getPrototypeOf !== "function")
 		}
 		else
 		{
-			var v = Math.floor(-rgb % RGBEX_SHIFT);
+			var v = Math.floor((-rgb % (RGBEX_SHIFT * ALPHAEX_SHIFT)) / ALPHAEX_SHIFT);
 			if (v > RGBEX_MAX)
 				v -= RGBEX_SHIFT;
 			return v / 1024;
 		}
 	};
+	
+	cr.GetAValue = function GetAValue(rgb)
+	{
+		if (isNegativeZero(rgb))
+		{
+			return 0;
+		}
+		else if (rgb >= 0)
+		{
+			return 1;
+		}
+		else
+		{
+			var v = Math.floor(-rgb % ALPHAEX_SHIFT);
+			// note alpha components cannot be negative
+			return v / 1024;
+		}
+	}
 
 	// Merge attributes of b in to a, where a does not have an attribute in b.
 	// Does not overwrite attributes in a; this is considered an error case (unless allowOverwrite is true)
@@ -5161,7 +5193,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.timeout_id = -1;
 		this.isloading = true;
 		this.loadingprogress = 0;
-		this.isNodeFullscreen = false;
 		this.stackLocalCount = 0;	// number of stack-based local vars for recursion
 		
 		// For audio preloading
@@ -5696,7 +5727,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		var mode = this.fullscreen_mode;
 		var orig_aspect, cur_aspect;
 		
-		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || this.isNodeFullscreen) && !this.isCordova;
+		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"]) && !this.isCordova;
 		
 		if (!isfullscreen && this.fullscreen_mode === 0 && !force)
 			return;			// ignore size events when not fullscreen and not using a fullscreen-in-browser mode
@@ -5709,6 +5740,13 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		// Letterbox or letterbox integer scale modes: adjust width and height and offset canvas accordingly
 		if (mode >= 4)
 		{
+			// HACK: window inner size may have been rounded down by browser.
+			if (mode === 5 && dpr !== 1)	// integer scaling
+			{
+				w += 1;
+				h += 1;
+			}
+
 			orig_aspect = this.original_width / this.original_height;
 			cur_aspect = w / h;
 			
@@ -7237,7 +7275,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 	
 		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || !!document["msFullscreenElement"]) && !this.isCordova;
 		
-		if ((isfullscreen || this.isNodeFullscreen) && this.fullscreen_scaling > 0)
+		if (isfullscreen && this.fullscreen_scaling > 0)
 			fsmode = this.fullscreen_scaling;
 		
 		// Disable this workaround on iOS. Due to what looks like Safari bugs,
@@ -7424,7 +7462,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
         this.kahanTime.add(this.dt);
 		this.wallTime.add(this.dt1);
 		
-		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || !!document["msFullscreenElement"] || this.isNodeFullscreen) && !this.isCordova;
+		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || !!document["msFullscreenElement"]) && !this.isCordova;
 		
 		// Calculate the project-wide zoom for fullscreen-scale mode
 		if (this.fullscreen_mode >= 2 /* scale */ || (isfullscreen && this.fullscreen_scaling > 0))
@@ -19175,7 +19213,7 @@ cr.system_object.prototype.loadFromJSON = function (o)
 		
 		var mode = this.runtime.fullscreen_mode;
 		
-		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || this.runtime.isNodeFullscreen);
+		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"]);
 		
 		if (isfullscreen && this.runtime.fullscreen_scaling > 0)
 			mode = this.runtime.fullscreen_scaling;
@@ -19319,7 +19357,7 @@ cr.system_object.prototype.loadFromJSON = function (o)
 	
 	SysActs.prototype.SetFullscreenQuality = function (q)
 	{
-		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || this.isNodeFullscreen);
+		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"]);
 		
 		if (!isfullscreen && this.runtime.fullscreen_mode === 0)
 			return;
@@ -27309,7 +27347,7 @@ cr.plugins_.Browser = function(runtime)
 	
 	Cnds.prototype.IsFullscreen = function ()
 	{
-		return !!(document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || this.runtime.isNodeFullscreen);
+		return !!(document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"]);
 	};
 	
 	Cnds.prototype.OnBackButton = function ()
@@ -27518,93 +27556,56 @@ cr.plugins_.Browser = function(runtime)
 			
 		if (stretchmode === 6)
 			stretchmode = 2;
-			
-		// Node-webkit app switching to fullscreen
-		if (this.runtime.isNodeWebkit)
+		
+		if (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || document["fullScreenElement"])
 		{
-			// In debug mode: forward to parent frame
-			if (this.runtime.isDebug)
-			{
-				DebuggerFullscreen(true);
-			}
-			else if (!this.runtime.isNodeFullscreen)
-			{
-				nw["Window"]["get"]()["enterFullscreen"]();
-				
-				this.runtime.isNodeFullscreen = true;
-				this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
-			}
+			return;
 		}
-		// Tell browser to go fullscreen
-		else
+		
+		this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+		
+		var elem = document.documentElement;
+		
+		// If the first request, add a fullscreen error handler. We need to call
+		// setSize() again for the display to end up correct if the request failed.
+		if (firstRequestFullscreen)
 		{
-			if (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || document["fullScreenElement"])
-			{
-				return;
-			}
-			
-			this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
-			
-			var elem = document.documentElement;
-			
-			// If the first request, add a fullscreen error handler. We need to call
-			// setSize() again for the display to end up correct if the request failed.
-			if (firstRequestFullscreen)
-			{
-				firstRequestFullscreen = false;
-				crruntime = this.runtime;
-				elem.addEventListener("mozfullscreenerror", onFullscreenError);
-				elem.addEventListener("webkitfullscreenerror", onFullscreenError);
-				elem.addEventListener("MSFullscreenError", onFullscreenError);
-				elem.addEventListener("fullscreenerror", onFullscreenError);
-			}
-			
-			// note case sensitivity on "Fullscreen" - matches spec http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html#api
-			// as of 12/11/11
-			if (elem["requestFullscreen"])
-				elem["requestFullscreen"]();
-			else if (elem["mozRequestFullScreen"])
-				elem["mozRequestFullScreen"]();
-			else if (elem["msRequestFullscreen"])
-				elem["msRequestFullscreen"]();
-			else if (elem["webkitRequestFullScreen"])
-			{
-				if (typeof Element !== "undefined" && typeof Element["ALLOW_KEYBOARD_INPUT"] !== "undefined")
-					elem["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"]);
-				else
-					elem["webkitRequestFullScreen"]();
-			}
+			firstRequestFullscreen = false;
+			crruntime = this.runtime;
+			elem.addEventListener("mozfullscreenerror", onFullscreenError);
+			elem.addEventListener("webkitfullscreenerror", onFullscreenError);
+			elem.addEventListener("MSFullscreenError", onFullscreenError);
+			elem.addEventListener("fullscreenerror", onFullscreenError);
+		}
+		
+		// note case sensitivity on "Fullscreen" - matches spec http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html#api
+		// as of 12/11/11
+		if (elem["requestFullscreen"])
+			elem["requestFullscreen"]();
+		else if (elem["mozRequestFullScreen"])
+			elem["mozRequestFullScreen"]();
+		else if (elem["msRequestFullscreen"])
+			elem["msRequestFullscreen"]();
+		else if (elem["webkitRequestFullScreen"])
+		{
+			if (typeof Element !== "undefined" && typeof Element["ALLOW_KEYBOARD_INPUT"] !== "undefined")
+				elem["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"]);
+			else
+				elem["webkitRequestFullScreen"]();
 		}
 	};
 	
 	Acts.prototype.CancelFullScreen = function ()
 	{
-		if (this.runtime.isNWjs)
-		{
-			// In debug mode: forward to parent frame
-			if (this.runtime.isDebug)
-			{
-				DebuggerFullscreen(false);
-			}
-			else if (this.runtime.isNodeFullscreen)
-			{
-				nw["Window"]["get"]()["leaveFullscreen"]();
-				
-				this.runtime.isNodeFullscreen = false;
-			}
-		}
-		else
-		{
-			// note case difference, see RequestFullScreen
-			if (document["exitFullscreen"])
-				document["exitFullscreen"]();
-			else if (document["mozCancelFullScreen"])
-				document["mozCancelFullScreen"]();
-			else if (document["msExitFullscreen"])
-				document["msExitFullscreen"]();
-			else if (document["webkitCancelFullScreen"])
-				document["webkitCancelFullScreen"]();
-		}
+		// note case difference, see RequestFullScreen
+		if (document["exitFullscreen"])
+			document["exitFullscreen"]();
+		else if (document["mozCancelFullScreen"])
+			document["mozCancelFullScreen"]();
+		else if (document["msExitFullscreen"])
+			document["msExitFullscreen"]();
+		else if (document["webkitCancelFullScreen"])
+			document["webkitCancelFullScreen"]();
 	};
 	
 	Acts.prototype.Vibrate = function (pattern_)
@@ -27632,6 +27633,9 @@ cr.plugins_.Browser = function(runtime)
 	
 	Acts.prototype.InvokeDownload = function (url_, filename_)
 	{
+		if (!filename_)
+			return;
+		
 		var a = document.createElement("a");
 		
 		if (typeof a["download"] === "undefined")
@@ -27655,6 +27659,9 @@ cr.plugins_.Browser = function(runtime)
 	
 	Acts.prototype.InvokeDownloadString = function (str_, mimetype_, filename_)
 	{
+		if (!filename_)
+			return;
+		
 		var datauri = "data:" + mimetype_ + "," + encodeURIComponent(str_);
 		var a = document.createElement("a");
 		
@@ -28458,20 +28465,23 @@ cr.getObjectRefTable = function () {
 		cr.plugins_.Sprite.prototype.exps.Height,
 		cr.behaviors.Bullet.prototype.acts.SetGravity,
 		cr.plugins_.Touch.prototype.cnds.OnTouchObject,
-		cr.system_object.prototype.acts.SetVar,
 		cr.plugins_.Browser.prototype.acts.Vibrate,
 		cr.plugins_.Sprite.prototype.acts.Destroy,
 		cr.plugins_.Sprite.prototype.cnds.OnCollision,
 		cr.system_object.prototype.acts.GoToLayout,
 		cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
-		cr.system_object.prototype.exps["int"],
+		cr.system_object.prototype.acts.SetVar,
+		cr.system_object.prototype.exps.int,
 		cr.plugins_.LocalStorage.prototype.exps.ItemValue,
-		cr.plugins_.Browser.prototype.acts.ExecJs,
 		cr.plugins_.Browser.prototype.cnds.OnUpdateReady,
 		cr.plugins_.Browser.prototype.acts.Reload,
+		cr.system_object.prototype.cnds.Compare,
+		cr.system_object.prototype.exps.originalviewportheight,
+		cr.plugins_.Touch.prototype.cnds.OnTapGestureObject,
+		cr.plugins_.Sprite.prototype.cnds.OnDestroyed,
+		cr.system_object.prototype.cnds.CompareVar,
 		cr.plugins_.Button.prototype.cnds.OnClicked,
 		cr.system_object.prototype.acts.ResetGlobals,
-		cr.system_object.prototype.cnds.Compare,
 		cr.plugins_.LocalStorage.prototype.acts.SetItem,
 		cr.plugins_.Browser.prototype.acts.RequestFullScreen
 	];
