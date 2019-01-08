@@ -28482,8 +28482,7 @@ cr.getObjectRefTable = function () {
 		cr.system_object.prototype.cnds.CompareVar,
 		cr.plugins_.Button.prototype.cnds.OnClicked,
 		cr.system_object.prototype.acts.ResetGlobals,
-		cr.plugins_.LocalStorage.prototype.acts.SetItem,
-		cr.plugins_.Browser.prototype.acts.RequestFullScreen
+		cr.plugins_.LocalStorage.prototype.acts.SetItem
 	];
 };
 
